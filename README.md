@@ -1,4 +1,5 @@
 # Library Management System — Data Analysis Project
+<img width="800" height="400" alt="git" src="https://github.com/user-attachments/assets/f0220ac4-0212-472b-b6ca-448a99518bbb" />
 
 ## Project Overview
 
