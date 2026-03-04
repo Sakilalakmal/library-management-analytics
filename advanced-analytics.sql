@@ -90,4 +90,24 @@ GROUP BY ct1.branch_id ,
         nr_of_books_issued
 
 -- Create a Table of Active Members
--- Use the CREATE TABLE AS (CTAS) statement to create a new table active_members containing members who have issued at least one book in the last 2 months.
+-- Use the CREATE TABLE AS (CTAS) statement to create a new table active_members containing members who have issued at least one book in the last 2 months
+
+SELECT 
+    mem.member_id AS issued_member_id
+INTO active_members
+FROM issued_status AS stats
+LEFT JOIN members AS mem
+ON stats.issued_member_id =  mem.member_id
+WHERE mem.member_id IS NOT NULL AND stats.issued_date >= DATEADD(MONTH,-2,CAST(GETDATE() AS DATE))
+GROUP BY mem.member_id
+HAVING COUNT(*) >= 1
+
+SELECT DATEADD(MONTH,-2,CAST(GETDATE() AS DATE))
+
+-- count how many books issued every month
+SELECT
+DATETRUNC(MONTH,issued_date) as month,
+COUNT(*) issue_count
+FROM issued_status
+GROUP BY DATETRUNC(MONTH,issued_date)
+
