@@ -139,7 +139,7 @@ LEFT JOIN books AS bks
 ON sts.issued_book_isbn = bks.isbn
 WHERE bks.status = 'damaged'
 GROUP BY issued_member_id
-HAVING COUNT(sts.issued_book_isbn) > 2
+HAVING COUNT(sts.issued_book_isbn) > 2;
 
 -- Stored Procedure Objective: Create a stored procedure to manage the status of books in a library system. 
 -- Description: Write a stored procedure that updates the status of a book in the library based on its issuance. 
@@ -282,13 +282,108 @@ FROM issued_status
 
 -- Calculate cumulative rental revenue over time based on issued books.
 SELECT 
-issued_id,
-issued_book_isbn,
-issued_book_name,
-issued_date,
-bks.isbn,
-bks.rental_price,
-SUM(bks.rental_price) OVER(ORDER BY issued_date ASC ) total_rental_revenue
+    issued_id,
+    issued_book_isbn,
+    issued_book_name,
+    issued_date,
+    bks.isbn,
+    bks.rental_price,
+    SUM(bks.rental_price) OVER(ORDER BY issued_date ASC ) total_rental_revenue
 FROM issued_status sts
 LEFT JOIN books AS bks
-ON sts.issued_book_isbn = bks.isbn
+    ON sts.issued_book_isbn = bks.isbn
+
+-- Group members by the month they first joined and track borrowing behavior.
+-- Create a cohort analysis that shows how many books were issued by members based on their registration month cohort
+WITH base_cte AS ( 
+    SELECT
+        member_id,
+        reg_date,
+        DATETRUNC(MONTH,reg_date) AS register_Month
+    FROM members
+    )
+    SELECT
+        bc.register_Month,
+        DATEDIFF(MONTH,bc.register_Month,DATETRUNC(MONTH,issued_date)) AS months_since_join,
+        COUNT(*) activity_count
+    FROM base_cte AS bc
+    LEFT JOIN issued_status AS sts
+        ON bc.member_id = sts.issued_member_id
+        WHERE sts.issued_date IS NOT NULL
+        GROUP BY bc.register_Month,DATEDIFF(MONTH,bc.register_Month,DATETRUNC(MONTH,issued_date));
+
+
+-- For each member cohort, calculate how many members borrowed again in:
+WITH base_cte AS ( 
+    SELECT
+        member_id,
+        reg_date,
+        DATETRUNC(MONTH,reg_date) AS register_Month
+    FROM members
+    )
+    SELECT
+        bc.register_Month,
+        DATEDIFF(MONTH,bc.register_Month,DATETRUNC(MONTH,issued_date)) AS months_since_join,
+        COUNT(DISTINCT bc.member_id) activity_count
+    FROM base_cte AS bc
+    LEFT JOIN issued_status AS sts
+        ON bc.member_id = sts.issued_member_id
+        WHERE sts.issued_date IS NOT NULL
+        GROUP BY bc.register_Month,DATEDIFF(MONTH,bc.register_Month,DATETRUNC(MONTH,issued_date));
+
+-- Detect days where the number of books issued was much higher than normal.
+
+WITH monthly_counts AS (
+    SELECT
+        DATETRUNC(MONTH, issued_date) AS month,
+        COUNT(*) AS books_issued
+    FROM issued_status
+    GROUP BY DATETRUNC(MONTH, issued_date)
+),
+avg_table AS (
+    SELECT
+        AVG(books_issued) AS avg_monthly_issues
+    FROM monthly_counts
+)
+SELECT
+    mc.month,
+    mc.books_issued,
+    at.avg_monthly_issues,
+    mc.books_issued - at.avg_monthly_issues AS difference_from_average
+FROM monthly_counts mc
+CROSS JOIN avg_table at;
+
+-- Rank members by total books issued and calculate their percentile position.
+WITH cte_based AS (
+SELECT
+mem.member_id,
+count(*) book_count,
+NTILE(4) OVER(ORDER BY count(*) DESC) AS bucket 
+FROM members AS mem
+LEFT JOIN issued_status AS sts
+ON mem.member_id = sts.issued_member_id
+GROUP BY mem.member_id
+)
+SELECT
+*,
+CASE WHEN bucket = 1 THEN 'best customer'
+     WHEN bucket = 2 THEN 'good member'
+     WHEN bucket = 3 THEN 'member'
+     ELSE 'low activity'
+END AS member_status
+FROM cte_based
+
+-- Calculate a 7-day rolling average of books issued.
+-- Objective: Smooth out short-term fluctuations in issue trends
+
+WITH first_cte AS (
+    SELECT
+        COUNT(*) book_count,
+        DATETRUNC(MONTH,issued_date) months
+    FROM issued_status 
+    GROUP BY DATETRUNC(MONTH,issued_date)
+    )
+    SELECT
+        book_count,
+        AVG(book_count) OVER(ORDER BY months DESC ROWS BETWEEN 6 PRECEDING AND CURRENT ROW) AS avg_month
+    FROM first_cte;
