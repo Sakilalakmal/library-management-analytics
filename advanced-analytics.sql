@@ -225,3 +225,70 @@ FROM CTE_first_cte AS ct1
 GROUP BY issued_member_id
 )
 SELECT * FROM second_cte
+
+
+ -- time series analysis
+
+SELECT
+DATETRUNC(MONTH,issued_date) AS month,
+COUNT(issued_book_isbn) AS book_month
+FROM issued_status
+GROUP BY DATETRUNC(MONTH,issued_date)
+PRINT('03 month has most issued book count')
+
+-- For each book category, rank books based on the number of times they have been issued.
+
+SELECT 
+    bks.category AS category,
+    DENSE_RANK() OVER(ORDER BY COUNT(*) DESC) AS rank
+FROM books AS bks
+LEFT JOIN issued_status AS sts
+ON bks.isbn = sts.issued_book_isbn
+GROUP BY bks.category
+
+            ----------------------------- testing ---------------------------
+            SELECT
+            bks.category AS category,
+            COUNT(*) bks_count
+            FROM books AS bks
+            LEFT JOIN issued_status AS stats
+            ON bks.isbn = stats.issued_book_isbn
+            GROUP BY bks.category
+            ORDER BY bks_count DESC
+
+
+-- For each member, list all books they have issued and assign a sequential order based on the issue date.
+SELECT
+issued_member_id,
+issued_date,
+ROW_NUMBER() OVER(PARTITION BY issued_member_id ORDER BY issued_date ASC) as orders,
+issued_book_name
+FROM issued_status 
+
+-- Calculate the number of days between consecutive book issues for each member.
+
+SELECT 
+*,
+DATEDIFF(DAY,prev_date,issued_date) AS date_differ
+FROM (
+SELECT
+issued_id,
+issued_member_id,
+issued_book_name,
+issued_date,
+LAG(issued_date) OVER(PARTITION BY issued_member_id ORDER BY issued_date ASC) AS prev_date
+FROM issued_status 
+) t
+
+-- Calculate cumulative rental revenue over time based on issued books.
+SELECT 
+issued_id,
+issued_book_isbn,
+issued_book_name,
+issued_date,
+bks.isbn,
+bks.rental_price,
+SUM(bks.rental_price) OVER(ORDER BY issued_date ASC ) total_rental_revenue
+FROM issued_status sts
+LEFT JOIN books AS bks
+ON sts.issued_book_isbn = bks.isbn
