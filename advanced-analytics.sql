@@ -198,3 +198,30 @@ BEGIN
       END;
 
 END;
+
+-- Create Table As Select (CTAS) Objective: Create a CTAS (Create Table As Select) query to identify overdue books and calculate fines.
+-- Description: Write a CTAS query to create a new table that lists each member and the books they have issued but not returned within 30 days. 
+-- The table should include: The number of overdue books. The total fines, with each day's fine calculated at $0.50. 
+-- The number of books issued by each member. 
+-- The resulting table should show: Member ID Number of overdue books Total fines
+WITH CTE_first_cte AS (
+SELECT
+issued_member_id,
+DATEDIFF(DAY, DATEADD(DAY,30,issued_date),GETDATE()) AS over_due_days,
+DATEDIFF(DAY, DATEADD(DAY,30,issued_date),GETDATE()) * 0.50 AS fined,
+sts.issued_book_isbn AS nr_of_books
+FROM issued_status AS sts
+LEFT JOIN return_status AS rtn
+ON sts.issued_id = rtn.issued_id
+WHERE return_date > DATEADD(DAY,30,issued_date) OR return_date IS NULL
+)
+,
+second_cte AS (
+SELECT 
+issued_member_id,
+SUM(fined) AS fined,
+COUNT(ct1.nr_of_books) AS nr_of_nrtn
+FROM CTE_first_cte AS ct1
+GROUP BY issued_member_id
+)
+SELECT * FROM second_cte
