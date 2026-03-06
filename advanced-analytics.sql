@@ -111,3 +111,90 @@ COUNT(*) issue_count
 FROM issued_status
 GROUP BY DATETRUNC(MONTH,issued_date)
 
+-- Find Employees with the Most Book Issues Processed
+-- Write a query to find the top 3 employees who have processed the most book issues. Display the employee name, number of books processed, and their branch
+
+
+SELECT TOP(3)
+emp.emp_name AS employee_name,
+sts.issued_emp_id,
+COUNT(issued_book_isbn) AS nr_of_books,
+emp.branch_id AS branch
+FROM issued_status AS sts
+LEFT JOIN employees AS emp
+ON sts.issued_emp_id = emp.emp_id
+GROUP BY sts.issued_emp_id , emp.emp_name , emp.branch_id
+ORDER BY COUNT(issued_book_isbn)  DESC
+
+-- Identify Members Issuing High-Risk Books
+-- Write a query to identify members who have issued books more than twice with the status "damaged" in the books table. Display the member name, book title, and the number of times they've issued damaged books.
+
+SELECT 
+sts.issued_member_id,
+COUNT(sts.issued_book_isbn) AS count
+FROM issued_status AS sts
+LEFT JOIN members AS mem
+ON sts.issued_member_id = mem.member_id
+LEFT JOIN books AS bks
+ON sts.issued_book_isbn = bks.isbn
+WHERE bks.status = 'damaged'
+GROUP BY issued_member_id
+HAVING COUNT(sts.issued_book_isbn) > 2
+
+-- Stored Procedure Objective: Create a stored procedure to manage the status of books in a library system. 
+-- Description: Write a stored procedure that updates the status of a book in the library based on its issuance. 
+-- The procedure should function as follows: The stored procedure should take the book_id as an input parameter. 
+--The procedure should first check if the book is available (status = 'yes'). 
+--If the book is available, it should be issued, and the status in the books table should be updated to 'no'. 
+--If the book is not available (status = 'no'), the procedure should return an error message indicating that the book is currently not available.
+
+
+CREATE PROCEDURE issued_books
+    @book_id NVARCHAR(30),
+    @issued_id NVARCHAR(20),
+    @issued_member_id NVARCHAR(20),
+    @issued_book_name NVARCHAR(100),
+    @issued_date DATE,
+    @issued_emp_id NVARCHAR(25)
+AS 
+BEGIN
+     DECLARE @book_status NVARCHAR(20)
+     SELECT
+     @book_status = status
+     FROM books
+     WHERE isbn = @book_id
+
+     -- check status
+     IF @book_status = NULL
+         BEGIN
+         PRINT('This book isnt exists...')
+         END;
+     ELSE IF @book_status = 'yes'
+         BEGIN 
+         INSERT INTO issued_status (
+             issued_id,
+             issued_member_id,
+             issued_book_name,
+             issued_date,
+             issued_book_isbn,
+             issued_emp_id)
+         VALUES (
+             @issued_id,
+             @issued_member_id,
+             @issued_book_name,
+             @issued_date,
+             @book_id,
+             @issued_emp_id)
+     
+         -- update book status
+         UPDATE books
+         set status = 'no'
+         WHERE isbn = @book_id
+
+         PRINT('book added successfully')
+         END;
+      ELSE BEGIN 
+      PRINT('This book currently unavailable')
+      END;
+
+END;
